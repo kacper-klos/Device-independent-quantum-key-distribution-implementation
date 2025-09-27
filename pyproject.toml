@@ -1,0 +1,9 @@
+[project]
+name = "device-independent-quantum-key-distribution-implementation"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ncpol2sdpa>=1.14.0",
+    "numpy>=2.3.3",
+]
