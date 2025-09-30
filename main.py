@@ -45,13 +45,11 @@ def is_hermitian_psd(matrix: npt.NDArray[np.complex128]) -> bool:
     ):
         return False
     # Better stability for checking if psd
-    eigenvalues = np.linalg.eigvalsh(
-        (matrix + matrix.conj().T) / 2
-    )
+    eigenvalues = np.linalg.eigvalsh((matrix + matrix.conj().T) / 2)
     return float(eigenvalues.min()) >= -ATOL
 
 
-def density_matix_check(rho: np.ndarray) -> bool:
+def density_matix_check(rho: npt.NDArray[np.complex128]) -> bool:
     """Check if passed quantum state is valid"""
     trace = np.abs(np.trace(rho))
     return (
@@ -88,3 +86,39 @@ def probability_vector(
             probabilities[i] = np.trace(rho @ np.kron(pvm_alice, pvm_bob))
             i += 1
     return probabilities
+
+
+def parametrixed_state(theta: float) -> npt.NDArray[np.float64]:
+    """Return state parametrized by theta"""
+    zero_ket = np.array([1.0, 0.0], dtype=np.float64)
+    one_ket = np.array([0.0, 1.0], dtype=np.float64)
+    return np.astype(np.cos(theta) * zero_ket + np.sin(theta) * one_ket, np.float64)
+
+
+def parametrized_projections(theta: float) -> npt.NDArray[np.float64]:
+    """Returns pair of pvm parametrized by theta"""
+    state = parametrixed_state(theta)
+    pvm = np.astype(np.outer(state, state), np.float64)
+    return np.stack([pvm, np.eye(STATES) - pvm])
+
+
+def max_quadratic_form_vector(
+    matrix: npt.NDArray[np.complex128],
+) -> npt.NDArray[np.complex128]:
+    """For the given matrix returns the unit vector that gives the highest possible value"""
+    # Check if the input is hermitian matrix
+    assert matrix.ndim == 2 and matrix.shape[0] == matrix.shape[1]
+    assert np.allclose(matrix, matrix.conj().T, rtol=RTOL, atol=ATOL)
+    # Better stability
+    matrix = (matrix + matrix.conj().T) / 2
+    eigenvalue, eigenvectors = np.linalg.eigh(matrix)
+    vector = eigenvectors[np.argmax(eigenvalue)]
+    return np.astype(vector, np.complex128)
+
+
+def reduced_visibility_matrix(
+    rho: npt.NDArray[np.complex128], visibility: float
+) -> npt.NDArray[np.complex128]:
+    """Set the visibility of a density matrix"""
+    assert visibility >= 0 and visibility <= 1 and density_matix_check(rho)
+    return visibility * rho + (1 - visibility) * np.eye(rho.shape[0])
