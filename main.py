@@ -20,20 +20,22 @@ def pvm_check(pvm_stacked: npt.NDArray[np.complex128]) -> bool:
         True if the set is the pvm.
     """
     # Check if it is valid set of pvm
-    status = pvm_stacked.ndim == 3 and np.allclose(
-        np.sum(pvm_stacked, axis=0), np.eye(STATES), rtol=RTOL, atol=ATOL
-    )
-    # Check each of pvm
-    i = 0
-    while status and i < pvm_stacked.shape[0]:
-        pvm = pvm_stacked[i]
-        status = (
-            pvm.shape == PROJECTION_SHAPE
-            and np.allclose(pvm, pvm.conj().T, rtol=RTOL, atol=ATOL)
-            and np.allclose(pvm, pvm @ pvm, rtol=RTOL, atol=ATOL)
-        )
-        i += 1
-    return status
+    if pvm_stacked.ndim != 4:
+        return False
+    for pvm_set in pvm_stacked:
+        if not np.allclose(
+            np.sum(pvm_set, axis=0), np.eye(STATES), rtol=RTOL, atol=ATOL
+        ):
+            return False
+        # Check each of pvm in set
+        for pvm in pvm_set:
+            if not (
+                pvm.shape == PROJECTION_SHAPE
+                and np.allclose(pvm, pvm.conj().T, rtol=RTOL, atol=ATOL)
+                and np.allclose(pvm, pvm @ pvm, rtol=RTOL, atol=ATOL)
+            ):
+                return False
+    return True
 
 
 def is_hermitian_psd(matrix: npt.NDArray[np.complex128]) -> bool:
@@ -62,8 +64,8 @@ def density_matix_check(rho: npt.NDArray[np.complex128]) -> bool:
 
 def probability_vector(
     rho: npt.NDArray[np.complex128],
-    pvm_alice_set: npt.NDArray[np.complex128],
-    pvm_bob_set: npt.NDArray[np.complex128],
+    pvm_alice_stacked: npt.NDArray[np.complex128],
+    pvm_bob_stacked: npt.NDArray[np.complex128],
 ) -> npt.NDArray[np.float64]:
     """Create a probability vector of Alice and Bob measurements
 
@@ -73,18 +75,28 @@ def probability_vector(
         pvm_bob_set: Set of Bob pvm.
 
     Returns:
-        Vector with probabilities of achieving the state.
+        Vector with probabilities of achieving the state where index a,b,x,y corresponds to p(ab|xy).
     """
     # Check validity of input
-    assert pvm_check(pvm_alice_set) and pvm_check(pvm_bob_set)
+    assert pvm_check(pvm_alice_stacked) and pvm_check(pvm_bob_stacked)
     assert density_matix_check(rho)
 
-    probabilities = np.zeros(pvm_alice_set.shape[0] * pvm_bob_set.shape[0])
-    i = 0
-    for pvm_alice in pvm_alice_set:
-        for pvm_bob in pvm_bob_set:
-            probabilities[i] = np.trace(rho @ np.kron(pvm_alice, pvm_bob))
-            i += 1
+    probabilities = np.zeros(
+        (
+            pvm_alice_stacked.shape[0],
+            pvm_bob_stacked.shape[0],
+            pvm_alice_stacked.shape[1],
+            pvm_bob_stacked.shape[1],
+        )
+    )
+    for x, alice_pvm_set in enumerate(pvm_alice_stacked):
+        for y, bob_pvm_set in enumerate(pvm_bob_stacked):
+            for a, alice_pvm in enumerate(alice_pvm_set):
+                for b, bob_pvm in enumerate(bob_pvm_set):
+                    probabilities[a, b, x, y] = np.trace(
+                        rho @ np.kron(alice_pvm, bob_pvm)
+                    )
+
     return probabilities
 
 
