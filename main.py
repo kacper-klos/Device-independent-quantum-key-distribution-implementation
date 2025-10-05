@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.typing as npt
+from itertools import product
 
 # Constants valid for 2x2 states for Alice and Bob
 STATES = 2
@@ -100,16 +101,19 @@ def probability_vector(
     return probabilities
 
 
-def parametrixed_state(theta: float) -> npt.NDArray[np.float64]:
+def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.float64]:
     """Return state parametrized by theta"""
     zero_ket = np.array([1.0, 0.0], dtype=np.float64)
     one_ket = np.array([0.0, 1.0], dtype=np.float64)
-    return np.astype(np.cos(theta) * zero_ket + np.sin(theta) * one_ket, np.float64)
+    return np.astype(
+        np.cos(theta) * zero_ket + np.exp(psi * 1j) * np.sin(theta) * one_ket,
+        np.float64,
+    )
 
 
-def parametrized_projections(theta: float) -> npt.NDArray[np.float64]:
+def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.float64]:
     """Returns pair of pvm parametrized by theta"""
-    state = parametrixed_state(theta)
+    state = parametrixed_state(theta, psi)
     pvm = np.astype(np.outer(state, state), np.float64)
     return np.stack([pvm, np.eye(STATES) - pvm])
 
@@ -134,3 +138,22 @@ def reduced_visibility_matrix(
     """Set the visibility of a density matrix"""
     assert visibility >= 0 and visibility <= 1 and density_matix_check(rho)
     return visibility * rho + (1 - visibility) * np.eye(rho.shape[0])
+
+
+def bell_expression(
+    probabilities_coefficients: npt.NDArray[np.float64],
+    alice_pvm_stack: npt.NDArray[np.float64],
+    bob_pvm_stack: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Creates a matrix representing a bell expression."""
+    bell_matrix = np.zeros(
+        (
+            alice_pvm_stack.shape[-2] + bob_pvm_stack.shape[-2],
+            alice_pvm_stack.shape[-1] + bob_pvm_stack.shape[-1],
+        )
+    )
+    for a, b, x, y in product(*probabilities_coefficients.shape):
+        bell_matrix += probabilities_coefficients[a, b, x, y] * (
+            np.kron(alice_pvm_stack[x, a], bob_pvm_stack[x, b])
+        )
+    return np.astype(bell_matrix, np.float64)

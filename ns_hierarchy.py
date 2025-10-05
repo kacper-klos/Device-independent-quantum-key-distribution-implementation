@@ -1,13 +1,13 @@
 import ncpol2sdpa as ncpol
 import numpy as np
 import numpy.typing as npt
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from itertools import product
 
 
 def GuessingProbability(
     probabilities: npt.NDArray[np.float64], x_star: int = 0, level: int = 2
-) -> float:
+) -> Tuple[float, List[float]]:
     assert (
         len(probabilities.shape) == 4
         and all(d > 0 for d in probabilities.shape)
@@ -52,12 +52,14 @@ def GuessingProbability(
         quantum_equalities.append(A[x][a] * B[y][b] - B[y][b] * A[x][a])
     # Set bounds for probabilities
     probabilities_equalities: List[ncpol.nc_utils.Operator] = []
+    probabilities_equalities_input: List[Tuple[int, int, int, int]] = []
     for a, b, x, y in product(
         range(a_size), range(b_size), range(x_size), range(y_size)
     ):
         probabilities_equalities.append(
             A[x][a] * B[y][b] - float(probabilities[a, b, x, y])
         )
+        probabilities_equalities_input.append((a, b, x, y))
     # Creator optimization
     a_value: Dict[int, float] = {}
     operators: List[ncpol.nc_utils.Operator] = []
@@ -78,5 +80,10 @@ def GuessingProbability(
         )
         sdp.solve(solver="mosek")
         a_value[a] = sdp.primal
-    # Return biggest value
-    return max(a_value.values())
+    # Get the dual variables os probabilities
+    dual_variables = sdp.y[len(quantum_equalities) :]
+    probabilities_coefficients = np.zeros(probabilities.shape)
+    for i, coefficient in enumerate(probabilities_equalities):
+        probabilities_coefficients[probabilities_equalities_input[i]] = coefficient
+    # Return biggest value and dual variables for each probability
+    return max(a_value.values()), dual_variables
