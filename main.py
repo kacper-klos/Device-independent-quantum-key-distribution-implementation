@@ -319,7 +319,7 @@ def alice_bob_entrophy_minimalization(
 
 
 def keyrate(
-    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 1
+    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 2
 ) -> float:
     initial_state = np.ones(STATE_SHAPE[0]) / np.sqrt(STATE_SHAPE[0])
     density = reduced_visibility_matrix(
