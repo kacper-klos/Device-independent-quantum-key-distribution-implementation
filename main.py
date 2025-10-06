@@ -114,7 +114,7 @@ def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.float64]:
 def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.float64]:
     """Returns pair of pvm parametrized by theta"""
     state = parametrixed_state(theta, psi)
-    pvm = np.astype(np.outer(state, state), np.float64)
+    pvm = np.astype(np.outer(state, state.conj()), np.float64)
     return np.stack([pvm, np.eye(STATES) - pvm])
 
 
@@ -157,3 +157,38 @@ def bell_expression(
             np.kron(alice_pvm_stack[x, a], bob_pvm_stack[x, b])
         )
     return np.astype(bell_matrix, np.float64)
+
+
+def maximum_bell_expression(
+    input_angles: npt.NDArray[np.float64],
+    probabilities_coefficients: npt.NDArray[np.float64],
+) -> float:
+    """Finds optimal state for the bell expression with given angles
+
+    Args:
+        input_angles: Composition of angles for Alice (up to 2*STATE index) and bob
+    """
+    assert input_angles.size == 2 * 2 * STATES
+    alice_pvm_stacked = np.stack(
+        [
+            parametrized_projections(input_angles[2 * i], input_angles[2 * i + 1])
+            for i in range(STATES)
+        ],
+    )
+    bob_pvm_stacked = np.stack(
+        [
+            parametrized_projections(
+                input_angles[2 * STATES + 2 * i], input_angles[2 * STATES + 2 * i + 1]
+            )
+            for i in range(STATES)
+        ],
+    )
+    bell_matrix = bell_expression(
+        probabilities_coefficients, alice_pvm_stacked, bob_pvm_stacked
+    )
+    # For stability
+    eigenvalues, eigenvectors = np.linalg.eigh((bell_matrix + bell_matrix.conj().T) / 2)
+    state = eigenvectors[:, np.argmax(eigenvalues)]
+    violation = state.conj().T @ bell_matrix @ state
+    assert violation.size == 1
+    return float(violation[0])
