@@ -164,22 +164,14 @@ def bell_expression(
 
 def pvm_from_angle_array(
     angles: npt.NDArray[np.float64],
-) -> Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
-    alice_pvm_stacked = np.stack(
+) -> npt.NDArray[np.complex128]:
+    pvm_stacked = np.stack(
         [
             parametrized_projections(angles[2 * i], angles[2 * i + 1])
-            for i in range(STATES)
+            for i in range(angles.size)
         ],
     )
-    bob_pvm_stacked = np.stack(
-        [
-            parametrized_projections(
-                angles[2 * STATES + 2 * i], angles[2 * STATES + 2 * i + 1]
-            )
-            for i in range(STATES)
-        ],
-    )
-    return alice_pvm_stacked, bob_pvm_stacked
+    return pvm_stacked
 
 
 def maximum_bell_expression(
@@ -192,7 +184,10 @@ def maximum_bell_expression(
         input_angles: Composition of angles for Alice (up to 2*STATE index) and bob
     """
     assert input_angles.size == 2 * 2 * STATES
-    alice_pvm_stacked, bob_pvm_stacked = pvm_from_angle_array(input_angles)
+    alice_pvm_stacked, bob_pvm_stacked = (
+        pvm_from_angle_array(input_angles[: 2 * STATES]),
+        pvm_from_angle_array(input_angles[2 * STATES :]),
+    )
     bell_matrix = bell_expression(
         probabilities_coefficients, alice_pvm_stacked, bob_pvm_stacked
     )
@@ -204,7 +199,7 @@ def maximum_bell_expression(
     return float(violation[0]), np.outer(state, state.conj())
 
 
-def alice_eve_entrophy(
+def alice_eve_entrophy_maximalization(
     visibility: float,
     density_matrix: npt.NDArray[np.complex128],
     initial_angles: npt.NDArray[np.float64],
@@ -220,7 +215,10 @@ def alice_eve_entrophy(
         low_visibiility_density_matrix = reduced_visibility_matrix(
             density_matrix, visibility
         )
-        alice_pvm_stacked, bob_pvm_stacked = pvm_from_angle_array(angles)
+        alice_pvm_stacked, bob_pvm_stacked = (
+            pvm_from_angle_array(angles[: 2 * STATES]),
+            pvm_from_angle_array(angles[2 * STATES :]),
+        )
         probabilities = probability_array(
             low_visibiility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
         )
@@ -233,7 +231,47 @@ def alice_eve_entrophy(
             lambda x: -maximum_bell_expression(x, probabilities_coefficients)[0],
             np.concatenate(2 * [2 * np.pi * i / STATES for i in range(STATES)]),
             T=np.pi / 10,
+            niter_success=100,
         )
         density_matrix = maximum_bell_expression(angles, probabilities)[1]
 
     return new_value, angles, reduced_visibility_matrix(density_matrix, visibility)
+
+
+def alice_bob_entrophy(
+    density_matrix: npt.NDArray[np.complex128],
+    alice_pvm_star_input: npt.NDArray[np.complex128],
+    bob_pvm_star_input: npt.NDArray[np.complex128],
+) -> float:
+    probability_array = np.zeros(
+        (alice_pvm_star_input.shape[0], bob_pvm_star_input.shape[0])
+    )
+    for i, alice_pvm in enumerate(alice_pvm_star_input):
+        for j, bob_pvm in enumerate(bob_pvm_star_input):
+            probability_array[i, j] = np.trace(
+                np.kron(alice_pvm, bob_pvm) @ density_matrix
+            )
+
+    entrophy_AB = -np.sum(
+        probability_array * np.log(probability_array) / np.log(STATES)
+    )
+    bob_probability = np.sum(probability_array, axis=0)
+    entrophy_B = -np.sum(bob_probability * np.log(bob_probability) / np.log(STATES))
+    return float(entrophy_AB - entrophy_B)
+
+
+def alice_bob_entrophy_minimalization(
+    density_matrix: npt.NDArray[np.complex128],
+    alice_pvm_star_input: npt.NDArray[np.complex128],
+) -> float:
+    bob_angles = scipy.optimize.basinhooping(
+        lambda x: alice_bob_entrophy(
+            density_matrix, alice_pvm_star_input, pvm_from_angle_array(x)
+        ),
+        np.concatenate([2 * np.pi * i / STATES for i in range(STATES)]),
+        T=np.pi / 10,
+        niter_success=100,
+    )
+    return alice_bob_entrophy(
+        density_matrix, alice_pvm_star_input, pvm_from_angle_array(bob_angles)
+    )
