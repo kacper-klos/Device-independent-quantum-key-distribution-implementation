@@ -7,7 +7,7 @@ from itertools import product
 
 def GuessingProbability(
     probabilities: npt.NDArray[np.float64], x_star: int = 0, level: int = 2
-) -> Tuple[float, List[float]]:
+) -> Tuple[float, npt.NDArray[np.float64]]:
     assert (
         len(probabilities.shape) == 4
         and all(d > 0 for d in probabilities.shape)
@@ -83,7 +83,7 @@ def GuessingProbability(
     # Get the dual variables os probabilities
     dual_variables = sdp.y[len(quantum_equalities) :]
     probabilities_coefficients = np.zeros(probabilities.shape)
-    for i, coefficient in enumerate(probabilities_equalities):
+    for i, coefficient in enumerate(dual_variables):
         probabilities_coefficients[probabilities_equalities_input[i]] = coefficient
     # Return biggest value and dual variables for each probability
-    return max(a_value.values()), dual_variables
+    return max(a_value.values()), probabilities_coefficients
