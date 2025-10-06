@@ -1,6 +1,9 @@
 import numpy as np
 import numpy.typing as npt
+import ns_hierarchy
+import scipy
 from itertools import product
+from typing import Tuple
 
 # Constants valid for 2x2 states for Alice and Bob
 STATES = 2
@@ -63,7 +66,7 @@ def density_matix_check(rho: npt.NDArray[np.complex128]) -> bool:
     )
 
 
-def probability_vector(
+def probability_array(
     rho: npt.NDArray[np.complex128],
     pvm_alice_stacked: npt.NDArray[np.complex128],
     pvm_bob_stacked: npt.NDArray[np.complex128],
@@ -111,7 +114,7 @@ def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.float64]:
     )
 
 
-def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.float64]:
+def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.complex128]:
     """Returns pair of pvm parametrized by theta"""
     state = parametrixed_state(theta, psi)
     pvm = np.astype(np.outer(state, state.conj()), np.float64)
@@ -142,8 +145,8 @@ def reduced_visibility_matrix(
 
 def bell_expression(
     probabilities_coefficients: npt.NDArray[np.float64],
-    alice_pvm_stack: npt.NDArray[np.float64],
-    bob_pvm_stack: npt.NDArray[np.float64],
+    alice_pvm_stack: npt.NDArray[np.complex128],
+    bob_pvm_stack: npt.NDArray[np.complex128],
 ) -> npt.NDArray[np.float64]:
     """Creates a matrix representing a bell expression."""
     bell_matrix = np.zeros(
@@ -159,30 +162,37 @@ def bell_expression(
     return np.astype(bell_matrix, np.float64)
 
 
-def maximum_bell_expression(
-    input_angles: npt.NDArray[np.float64],
-    probabilities_coefficients: npt.NDArray[np.float64],
-) -> float:
-    """Finds optimal state for the bell expression with given angles
-
-    Args:
-        input_angles: Composition of angles for Alice (up to 2*STATE index) and bob
-    """
-    assert input_angles.size == 2 * 2 * STATES
+def pvm_from_angle_array(
+    angles: npt.NDArray[np.float64],
+) -> Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     alice_pvm_stacked = np.stack(
         [
-            parametrized_projections(input_angles[2 * i], input_angles[2 * i + 1])
+            parametrized_projections(angles[2 * i], angles[2 * i + 1])
             for i in range(STATES)
         ],
     )
     bob_pvm_stacked = np.stack(
         [
             parametrized_projections(
-                input_angles[2 * STATES + 2 * i], input_angles[2 * STATES + 2 * i + 1]
+                angles[2 * STATES + 2 * i], angles[2 * STATES + 2 * i + 1]
             )
             for i in range(STATES)
         ],
     )
+    return alice_pvm_stacked, bob_pvm_stacked
+
+
+def maximum_bell_expression(
+    input_angles: npt.NDArray[np.float64],
+    probabilities_coefficients: npt.NDArray[np.float64],
+) -> Tuple[float, npt.NDArray[np.complex128]]:
+    """Finds optimal state for the bell expression with given angles
+
+    Args:
+        input_angles: Composition of angles for Alice (up to 2*STATE index) and bob
+    """
+    assert input_angles.size == 2 * 2 * STATES
+    alice_pvm_stacked, bob_pvm_stacked = pvm_from_angle_array(input_angles)
     bell_matrix = bell_expression(
         probabilities_coefficients, alice_pvm_stacked, bob_pvm_stacked
     )
@@ -191,4 +201,39 @@ def maximum_bell_expression(
     state = eigenvectors[:, np.argmax(eigenvalues)]
     violation = state.conj().T @ bell_matrix @ state
     assert violation.size == 1
-    return float(violation[0])
+    return float(violation[0]), np.outer(state, state.conj())
+
+
+def alice_eve_entrophy(
+    visibility: float,
+    density_matrix: npt.NDArray[np.complex128],
+    initial_angles: npt.NDArray[np.float64],
+    x_star: int = 0,
+    difference: float = 10e-6,
+) -> Tuple[float, npt.NDArray[np.float64], npt.NDArray[np.complex128]]:
+    assert density_matix_check(density_matrix)
+    old_value = 100.0
+    new_value = 0.0
+    angles = initial_angles
+
+    while np.abs(old_value - new_value) > difference:
+        low_visibiility_density_matrix = reduced_visibility_matrix(
+            density_matrix, visibility
+        )
+        alice_pvm_stacked, bob_pvm_stacked = pvm_from_angle_array(angles)
+        probabilities = probability_array(
+            low_visibiility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
+        )
+        old_value = new_value
+        new_value, probabilities_coefficients = ns_hierarchy.GuessingProbability(
+            probabilities, x_star, 4
+        )
+        new_value = -np.log(new_value) / np.log(STATES)
+        angles = scipy.optimize.basinhopping(
+            lambda x: -maximum_bell_expression(x, probabilities_coefficients)[0],
+            np.concatenate(2 * [2 * np.pi * i / STATES for i in range(STATES)]),
+            T=np.pi / 10,
+        )
+        density_matrix = maximum_bell_expression(angles, probabilities)[1]
+
+    return new_value, angles, reduced_visibility_matrix(density_matrix, visibility)
