@@ -275,3 +275,23 @@ def alice_bob_entrophy_minimalization(
     return alice_bob_entrophy(
         density_matrix, alice_pvm_star_input, pvm_from_angle_array(bob_angles)
     )
+
+
+def keyrate(visibility: float = 1, x_star: int = 0, verbose: bool = True) -> float:
+    initial_state = np.ones(STATES) / np.sqrt(STATES)
+    density = reduced_visibility_matrix(
+        np.outer(initial_state, initial_state.conj().T), visibility
+    )
+    angles = np.concatenate(2 * [2 * np.pi * i / STATES for i in range(STATES)])
+    entrophy_AE, angles, density = alice_eve_entrophy_maximalization(
+        visibility, density, angles, x_star
+    )
+    alice_pvm_stacked = pvm_from_angle_array(angles)
+    entrophy_AB = alice_bob_entrophy_minimalization(density, alice_pvm_stacked[x_star])
+    keyrate_value = entrophy_AE - entrophy_AB
+    if verbose:
+        print(f"Keyrate for visibility{visibility} = {keyrate_value}")
+    return keyrate_value
+
+
+keyrate()
