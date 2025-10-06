@@ -5,7 +5,9 @@ import scipy
 from itertools import product
 from typing import Tuple
 
+
 # Constants valid for 2x2 states for Alice and Bob
+INPUTS = 2
 STATES = 2
 PROJECTION_SHAPE = (STATES, STATES)
 STATE_SHAPE = (4, 4)
@@ -25,19 +27,24 @@ def pvm_check(pvm_stacked: npt.NDArray[np.complex128]) -> bool:
     """
     # Check if it is valid set of pvm
     if pvm_stacked.ndim != 4:
+        print(f"Dim is wrong: {pvm_stacked.ndim}")
         return False
     for pvm_set in pvm_stacked:
         if not np.allclose(
             np.sum(pvm_set, axis=0), np.eye(STATES), rtol=RTOL, atol=ATOL
         ):
+            print(f"Not to identity: {pvm_set}")
             return False
         # Check each of pvm in set
         for pvm in pvm_set:
-            if not (
-                pvm.shape == PROJECTION_SHAPE
-                and np.allclose(pvm, pvm.conj().T, rtol=RTOL, atol=ATOL)
-                and np.allclose(pvm, pvm @ pvm, rtol=RTOL, atol=ATOL)
-            ):
+            if not pvm.shape == PROJECTION_SHAPE:
+                print(f"Not proper shape of a {pvm.shape}")
+                return False
+            if not np.allclose(pvm, pvm.conj().T, rtol=RTOL, atol=ATOL):
+                print(f"Not hermitian {pvm}")
+                return False
+            if not np.allclose(pvm, pvm @ pvm, rtol=RTOL, atol=ATOL):
+                print(f"Not projection {pvm} != {pvm @ pvm}")
                 return False
     return True
 
@@ -87,10 +94,10 @@ def probability_array(
 
     probabilities = np.zeros(
         (
-            pvm_alice_stacked.shape[0],
-            pvm_bob_stacked.shape[0],
             pvm_alice_stacked.shape[1],
             pvm_bob_stacked.shape[1],
+            pvm_alice_stacked.shape[0],
+            pvm_bob_stacked.shape[0],
         )
     )
     for x, alice_pvm_set in enumerate(pvm_alice_stacked):
@@ -104,20 +111,20 @@ def probability_array(
     return probabilities
 
 
-def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.float64]:
+def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.complex128]:
     """Return state parametrized by theta"""
     zero_ket = np.array([1.0, 0.0], dtype=np.float64)
     one_ket = np.array([0.0, 1.0], dtype=np.float64)
     return np.astype(
         np.cos(theta) * zero_ket + np.exp(psi * 1j) * np.sin(theta) * one_ket,
-        np.float64,
+        np.complex128,
     )
 
 
 def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.complex128]:
     """Returns pair of pvm parametrized by theta"""
     state = parametrixed_state(theta, psi)
-    pvm = np.astype(np.outer(state, state.conj()), np.float64)
+    pvm = np.astype(np.outer(state, state.conj()), np.complex128)
     return np.stack([pvm, np.eye(STATES) - pvm])
 
 
@@ -139,7 +146,8 @@ def reduced_visibility_matrix(
     rho: npt.NDArray[np.complex128], visibility: float
 ) -> npt.NDArray[np.complex128]:
     """Set the visibility of a density matrix"""
-    assert visibility >= 0 and visibility <= 1 and density_matix_check(rho)
+    assert visibility >= 0 and visibility <= 1
+    assert density_matix_check(rho)
     return visibility * rho + (1 - visibility) * np.eye(rho.shape[0])
 
 
@@ -153,9 +161,13 @@ def bell_expression(
         (
             alice_pvm_stack.shape[-2] + bob_pvm_stack.shape[-2],
             alice_pvm_stack.shape[-1] + bob_pvm_stack.shape[-1],
-        )
+        ),
+        dtype=np.complex128,
     )
-    for a, b, x, y in product(*probabilities_coefficients.shape):
+    shape = probabilities_coefficients.shape
+    for a, b, x, y in product(
+        range(shape[0]), range(shape[1]), range(shape[2]), range(shape[3])
+    ):
         bell_matrix += probabilities_coefficients[a, b, x, y] * (
             np.kron(alice_pvm_stack[x, a], bob_pvm_stack[x, b])
         )
@@ -163,12 +175,13 @@ def bell_expression(
 
 
 def pvm_from_angle_array(
-    angles: npt.NDArray[np.float64],
+    angles: npt.NDArray[np.float64], inputs: int, outputs: int
 ) -> npt.NDArray[np.complex128]:
+    assert angles.size % (inputs * outputs) == 0
     pvm_stacked = np.stack(
         [
-            parametrized_projections(angles[2 * i], angles[2 * i + 1])
-            for i in range(angles.size)
+            parametrized_projections(angles[outputs * i], angles[outputs * i + 1])
+            for i in range(inputs)
         ],
     )
     return pvm_stacked
@@ -185,8 +198,12 @@ def maximum_bell_expression(
     """
     assert input_angles.size == 2 * 2 * STATES
     alice_pvm_stacked, bob_pvm_stacked = (
-        pvm_from_angle_array(input_angles[: 2 * STATES]),
-        pvm_from_angle_array(input_angles[2 * STATES :]),
+        pvm_from_angle_array(
+            input_angles[: int(input_angles.size / 2)], INPUTS, STATES
+        ),
+        pvm_from_angle_array(
+            input_angles[int(input_angles.size / 2) :], INPUTS, STATES
+        ),
     )
     bell_matrix = bell_expression(
         probabilities_coefficients, alice_pvm_stacked, bob_pvm_stacked
@@ -196,44 +213,50 @@ def maximum_bell_expression(
     state = eigenvectors[:, np.argmax(eigenvalues)]
     violation = state.conj().T @ bell_matrix @ state
     assert violation.size == 1
-    return float(violation[0]), np.outer(state, state.conj())
+    return float(violation), np.outer(state, state.conj())
 
 
 def alice_eve_entrophy_maximalization(
     visibility: float,
     density_matrix: npt.NDArray[np.complex128],
-    initial_angles: npt.NDArray[np.float64],
+    angles: npt.NDArray[np.float64],
     x_star: int = 0,
-    difference: float = 10e-6,
+    level: int = 2,
+    difference: float = 10e-3,
 ) -> Tuple[float, npt.NDArray[np.float64], npt.NDArray[np.complex128]]:
     assert density_matix_check(density_matrix)
+    assert angles.ndim == 1 and angles.size % 2 == 0
     old_value = 100.0
     new_value = 0.0
-    angles = initial_angles
 
     while np.abs(old_value - new_value) > difference:
         low_visibiility_density_matrix = reduced_visibility_matrix(
             density_matrix, visibility
         )
         alice_pvm_stacked, bob_pvm_stacked = (
-            pvm_from_angle_array(angles[: 2 * STATES]),
-            pvm_from_angle_array(angles[2 * STATES :]),
+            pvm_from_angle_array(angles[: int(angles.size / 2)], INPUTS, STATES),
+            pvm_from_angle_array(angles[int(angles.size / 2) :], INPUTS, STATES),
         )
         probabilities = probability_array(
             low_visibiility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
         )
         old_value = new_value
         new_value, probabilities_coefficients = ns_hierarchy.GuessingProbability(
-            probabilities, x_star, 4
+            probabilities, x_star, level
         )
         new_value = -np.log(new_value) / np.log(STATES)
+        initial_values = np.tile([2 * np.pi * i / STATES for i in range(STATES)], 2 * 2)
         angles = scipy.optimize.basinhopping(
             lambda x: -maximum_bell_expression(x, probabilities_coefficients)[0],
-            np.concatenate(2 * [2 * np.pi * i / STATES for i in range(STATES)]),
-            T=np.pi / 10,
-            niter_success=100,
-        )
-        density_matrix = maximum_bell_expression(angles, probabilities)[1]
+            initial_values,
+            T=np.pi / 5,
+            niter_success=50,
+            minimizer_kwargs={
+                "method": "L-BFGS-B",
+                "bounds": initial_values.size * [(0.0, 2 * np.pi)],
+            },
+        ).x
+        density_matrix = maximum_bell_expression(angles, probabilities_coefficients)[1]
 
     return new_value, angles, reduced_visibility_matrix(density_matrix, visibility)
 
@@ -248,15 +271,25 @@ def alice_bob_entrophy(
     )
     for i, alice_pvm in enumerate(alice_pvm_star_input):
         for j, bob_pvm in enumerate(bob_pvm_star_input):
-            probability_array[i, j] = np.trace(
-                np.kron(alice_pvm, bob_pvm) @ density_matrix
-            )
-
+            val = np.trace(np.kron(alice_pvm, bob_pvm) @ density_matrix)
+            probability_array[i, j] = np.real(val)
+    # Fix rounding error
+    probability_array = np.clip(probability_array, 0.0, 1.0)
+    probability_array = probability_array / np.sum(probability_array)
+    probability_mask = probability_array > 0
     entrophy_AB = -np.sum(
-        probability_array * np.log(probability_array) / np.log(STATES)
+        probability_array[probability_mask]
+        * np.log(probability_array[probability_mask])
+        / np.log(STATES)
     )
     bob_probability = np.sum(probability_array, axis=0)
-    entrophy_B = -np.sum(bob_probability * np.log(bob_probability) / np.log(STATES))
+    # Fix rounding error
+    bob_probability = np.clip(bob_probability, 0.0, 1.0)
+    bob_probability = bob_probability / np.sum(bob_probability)
+    bob_mask = bob_probability > 0
+    entrophy_B = -np.sum(
+        bob_probability[bob_mask] * np.log(bob_probability[bob_mask]) / np.log(STATES)
+    )
     return float(entrophy_AB - entrophy_B)
 
 
@@ -264,33 +297,41 @@ def alice_bob_entrophy_minimalization(
     density_matrix: npt.NDArray[np.complex128],
     alice_pvm_star_input: npt.NDArray[np.complex128],
 ) -> float:
-    bob_angles = scipy.optimize.basinhooping(
+    initial_values = np.tile([2 * np.pi * i / STATES for i in range(STATES)], 1)
+    bob_angles = scipy.optimize.basinhopping(
         lambda x: alice_bob_entrophy(
-            density_matrix, alice_pvm_star_input, pvm_from_angle_array(x)
+            density_matrix, alice_pvm_star_input, parametrized_projections(*x)
         ),
-        np.concatenate([2 * np.pi * i / STATES for i in range(STATES)]),
-        T=np.pi / 10,
-        niter_success=100,
-    )
+        initial_values,
+        T=np.pi / 5,
+        niter_success=50,
+        minimizer_kwargs={
+            "method": "L-BFGS-B",
+            "bounds": initial_values.size * [(0.0, 2 * np.pi)],
+        },
+    ).x
     return alice_bob_entrophy(
-        density_matrix, alice_pvm_star_input, pvm_from_angle_array(bob_angles)
+        density_matrix, alice_pvm_star_input, parametrized_projections(*bob_angles)
     )
 
 
-def keyrate(visibility: float = 1, x_star: int = 0, verbose: bool = True) -> float:
-    initial_state = np.ones(STATES) / np.sqrt(STATES)
+def keyrate(
+    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 2
+) -> float:
+    initial_state = np.ones(STATE_SHAPE[0]) / np.sqrt(STATE_SHAPE[0])
     density = reduced_visibility_matrix(
         np.outer(initial_state, initial_state.conj().T), visibility
     )
-    angles = np.concatenate(2 * [2 * np.pi * i / STATES for i in range(STATES)])
+    angles = np.tile([2 * np.pi * i / STATES for i in range(STATES)], 2 * STATES)
     entrophy_AE, angles, density = alice_eve_entrophy_maximalization(
-        visibility, density, angles, x_star
+        visibility, density, angles, x_star, level
     )
-    alice_pvm_stacked = pvm_from_angle_array(angles)
-    entrophy_AB = alice_bob_entrophy_minimalization(density, alice_pvm_stacked[x_star])
+    entrophy_AB = alice_bob_entrophy_minimalization(
+        density, parametrized_projections(angles[x_star], angles[x_star + 1])
+    )
     keyrate_value = entrophy_AE - entrophy_AB
     if verbose:
-        print(f"Keyrate for visibility{visibility} = {keyrate_value}")
+        print(f"For V = {visibility}: r = {keyrate_value}")
     return keyrate_value
 
 

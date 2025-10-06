@@ -1,6 +1,7 @@
 import ncpol2sdpa as ncpol
 import numpy as np
 import numpy.typing as npt
+import sympy
 from typing import List, Dict, Tuple
 from itertools import product
 
@@ -24,23 +25,22 @@ def GuessingProbability(
         for i in range(y_size)
     ]
     # Create constraints satisfied by quantum systems
-    quantum_equalities: List[ncpol.nc_utils.Operator] = []
+    quantum_equalities: List[sympy.physics.quantum.operator.HermitianOperator] = []
 
     def QuantumBehaviorBounds(
-        operators: List[ncpol.nc_utils.Operator],
-        equalities: List[ncpol.nc_utils.Polynomial],
+        operators: List[sympy.physics.quantum.operator.HermitianOperator],
+        equalities: List[sympy.core.expr.Expr],
     ) -> None:
         for input_operators_set in operators:
-            for operator in input_operators_set:
+            for i, operator in enumerate(input_operators_set):
                 # Indepotent
                 equalities.append(operator * operator - operator)
-                for other_operator in input_operators_set:
-                    if operator != other_operator:
-                        # Orthogonality
-                        equalities.append(operator * other_operator)
+                for other_operator in input_operators_set[:i]:
+                    # Orthogonality
+                    equalities.append(operator * other_operator)
             # Summing to identity
             equalities.append(
-                sum(input_operators_set for _ in range(len(input_operators_set))) - 1
+                sum(input_operators_set[i] for i in range(len(input_operators_set))) - 1
             )
 
     QuantumBehaviorBounds(A, quantum_equalities)
@@ -51,18 +51,24 @@ def GuessingProbability(
     ):
         quantum_equalities.append(A[x][a] * B[y][b] - B[y][b] * A[x][a])
     # Set bounds for probabilities
-    probabilities_equalities: List[ncpol.nc_utils.Operator] = []
-    probabilities_equalities_input: List[Tuple[int, int, int, int]] = []
+    probabilities_equalities: List[
+        sympy.physics.quantum.operator.HermitianOperator
+    ] = []
+    raw_equalities: List[
+        Tuple[
+            Tuple[int, int, int, int], sympy.physics.quantum.operator.HermitianOperator
+        ]
+    ] = []
     for a, b, x, y in product(
         range(a_size), range(b_size), range(x_size), range(y_size)
     ):
         probabilities_equalities.append(
             A[x][a] * B[y][b] - float(probabilities[a, b, x, y])
         )
-        probabilities_equalities_input.append((a, b, x, y))
+        raw_equalities.append(((a, b, x, y), A[x][a] * B[y][b]))
     # Creator optimization
-    a_value: Dict[int, float] = {}
-    operators: List[ncpol.nc_utils.Operator] = []
+    a_value: Dict[int, Tuple[float, List[float]]] = {}
+    operators: List[sympy.physics.quantum.operator.HermitianOperator] = []
     for a in range(a_size):
         for x in range(x_size):
             operators.append(A[x][a])
@@ -70,20 +76,23 @@ def GuessingProbability(
         for y in range(y_size):
             operators.append(B[y][b])
     for a in range(a_size):
-        sdp = ncpol.SdpRelaxation(verbose=0, variables=operators)
+        sdp = ncpol.SdpRelaxation(verbose=1, variables=operators)
         sdp.get_relaxation(
             level=level,
             objective=A[x_star][a],
             equalities=quantum_equalities,
             momentequalities=probabilities_equalities,
-            removeequalities=True,
         )
         sdp.solve(solver="mosek")
-        a_value[a] = sdp.primal
-    # Get the dual variables os probabilities
-    dual_variables = sdp.y[len(quantum_equalities) :]
+        type(sdp.y_mat)
+        a_value[a] = (
+            sdp.primal,
+            [sdp.extract_dual_value(raw[1]) for raw in raw_equalities],
+        )
+    # Get the best solution
+    max_tuple = max(a_value.items(), key=lambda x: x[1][0])
     probabilities_coefficients = np.zeros(probabilities.shape)
-    for i, coefficient in enumerate(dual_variables):
-        probabilities_coefficients[probabilities_equalities_input[i]] = coefficient
+    for i, indexes in enumerate(raw_equalities):
+        probabilities_coefficients[indexes[0]] = max_tuple[1][1][i]
     # Return biggest value and dual variables for each probability
-    return max(a_value.values()), probabilities_coefficients
+    return max_tuple[1][0], probabilities_coefficients
