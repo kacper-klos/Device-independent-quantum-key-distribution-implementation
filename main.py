@@ -148,7 +148,10 @@ def reduced_visibility_matrix(
     """Set the visibility of a density matrix"""
     assert visibility >= 0 and visibility <= 1
     assert density_matix_check(rho)
-    return visibility * rho + (1 - visibility) * np.eye(rho.shape[0])
+    return np.astype(
+        visibility * rho + (1 - visibility) / rho.shape[0] * np.eye(rho.shape[0]),
+        np.complex128,
+    )
 
 
 def bell_expression(
@@ -169,7 +172,7 @@ def bell_expression(
         range(shape[0]), range(shape[1]), range(shape[2]), range(shape[3])
     ):
         bell_matrix += probabilities_coefficients[a, b, x, y] * (
-            np.kron(alice_pvm_stack[x, a], bob_pvm_stack[x, b])
+            np.kron(alice_pvm_stack[x, a], bob_pvm_stack[y, b])
         )
     return np.astype(bell_matrix, np.float64)
 
@@ -316,7 +319,7 @@ def alice_bob_entrophy_minimalization(
 
 
 def keyrate(
-    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 2
+    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 1
 ) -> float:
     initial_state = np.ones(STATE_SHAPE[0]) / np.sqrt(STATE_SHAPE[0])
     density = reduced_visibility_matrix(

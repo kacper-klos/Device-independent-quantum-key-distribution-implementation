@@ -79,14 +79,14 @@ def GuessingProbability(
         sdp = ncpol.SdpRelaxation(verbose=1, variables=operators)
         sdp.get_relaxation(
             level=level,
-            objective=A[x_star][a],
+            objective=-A[x_star][a],
             equalities=quantum_equalities,
             momentequalities=probabilities_equalities,
         )
         sdp.solve(solver="mosek")
         type(sdp.y_mat)
         a_value[a] = (
-            sdp.primal,
+            -sdp.primal,
             [sdp.extract_dual_value(raw[1]) for raw in raw_equalities],
         )
     # Get the best solution
