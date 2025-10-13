@@ -224,15 +224,19 @@ def alice_eve_entrophy_maximalization(
     density_matrix: npt.NDArray[np.complex128],
     angles: npt.NDArray[np.float64],
     x_star: int = 0,
-    level: int = 2,
+    level: int = 1,
     difference: float = 10e-3,
+    max_iters: int = 100,
 ) -> Tuple[float, npt.NDArray[np.float64], npt.NDArray[np.complex128]]:
     assert density_matix_check(density_matrix)
     assert angles.ndim == 1 and angles.size % 2 == 0
-    old_value = 100.0
-    new_value = 0.0
+    old_value = np.inf
+    new_value = 100.0
 
-    while np.abs(old_value - new_value) > difference:
+    initial_values = np.tile([2 * np.pi * i / STATES for i in range(STATES)], 2 * 2)
+    i = 0
+    while np.abs(old_value - new_value) > difference and max_iters > i:
+        i += 1
         low_visibiility_density_matrix = reduced_visibility_matrix(
             density_matrix, visibility
         )
@@ -244,11 +248,16 @@ def alice_eve_entrophy_maximalization(
             low_visibiility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
         )
         old_value = new_value
-        new_value, probabilities_coefficients = ns_hierarchy.GuessingProbability(
-            probabilities, x_star, level
+        guessing_probability, probabilities_coefficients = (
+            ns_hierarchy.GuessingProbability(probabilities, x_star, level)
         )
-        new_value = -np.log(new_value) / np.log(STATES)
-        initial_values = np.tile([2 * np.pi * i / STATES for i in range(STATES)], 2 * 2)
+        print(guessing_probability)
+        guessing_probability = np.clip(guessing_probability, 0.0, 1.0)
+        new_value = (
+            1.0
+            if guessing_probability < ATOL
+            else -np.log(guessing_probability) / np.log(STATES)
+        )
         angles = scipy.optimize.basinhopping(
             lambda x: -maximum_bell_expression(x, probabilities_coefficients)[0],
             initial_values,
@@ -260,6 +269,9 @@ def alice_eve_entrophy_maximalization(
             },
         ).x
         density_matrix = maximum_bell_expression(angles, probabilities_coefficients)[1]
+        print(new_value)
+        print(old_value)
+        print(np.abs(old_value - new_value))
 
     return new_value, angles, reduced_visibility_matrix(density_matrix, visibility)
 
@@ -319,7 +331,7 @@ def alice_bob_entrophy_minimalization(
 
 
 def keyrate(
-    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 2
+    visibility: float = 1, x_star: int = 0, verbose: bool = True, level: int = 1
 ) -> float:
     initial_state = np.ones(STATE_SHAPE[0]) / np.sqrt(STATE_SHAPE[0])
     density = reduced_visibility_matrix(
@@ -338,4 +350,4 @@ def keyrate(
     return keyrate_value
 
 
-keyrate()
+keyrate(visibility=1.0)
