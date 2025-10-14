@@ -1,4 +1,4 @@
-#  This file consist of any raw optimalizations not depending on any other optimization.
+# This file consists of low-level optimizations independent of other modules.
 import ncpol2sdpa as ncpol
 import numpy as np
 import numpy.typing as npt
@@ -15,7 +15,7 @@ def GuessingProbability(
 
     Args:
         probabilities: Array for which index [a,b,x,y] corresponds to probability p(ab|xy).
-        x_star: Special input for which the guessing probability of eavsedropper will be maximized.
+        x_star: Special input for which the guessing probability of eavesdropper will be maximized.
         level: Level of the npa hierarchy used for solving the problem.
 
     Returns:
@@ -47,7 +47,7 @@ def GuessingProbability(
         for input_operators_set in operators:
             for i, operator in enumerate(input_operators_set):
                 quantum_inequalities.append(operator)
-                # Indepotent
+                # Idempotent
                 quantum_equalities.append(operator * operator - operator)
                 for other_operator in input_operators_set[:i]:
                     # Orthogonality
@@ -60,7 +60,7 @@ def GuessingProbability(
     QuantumBehaviorBounds(A)
     QuantumBehaviorBounds(B)
     QuantumBehaviorBounds(E)
-    # Commutivity
+    # Commutativity
     for a, b, x, y in product(
         range(a_size), range(b_size), range(x_size), range(y_size)
     ):
@@ -108,7 +108,7 @@ def GuessingProbability(
     probabilities_coefficients = np.zeros(probabilities.shape)
     for i, indexes in enumerate(raw_equalities):
         probabilities_coefficients[indexes[0]] = list_dual_value[i]
-    # Return biggest value and dual variables for each probability
+    # Return the optimal value and dual variables corresponding to each probability.
     return -sdp.primal, probabilities_coefficients
 
 
@@ -149,7 +149,7 @@ def alice_bob_entrophy(
 def max_quadratic_form_vector(
     matrix: npt.NDArray[np.complex128],
 ) -> npt.NDArray[np.complex128]:
-    """For the given matrix returns the unit vector that gives the highest possible value"""
+    """Return the unit vector that yields the maximum quadratic form value for the given matrix."""
     # Check if the input is hermitian matrix
     assert matrix.ndim == 2 and matrix.shape[0] == matrix.shape[1]
     assert np.allclose(
@@ -170,7 +170,7 @@ def maximum_bell_expression(
 
     Args:
         input_angles: Composition of angles for Alice (up to 2*STATE index) and bob.
-        probabilities_coefficients: Coefficinets for bell state where position at index [a,b,x,y] corresponds to coefficient of p(ab|xy).
+        probabilities_coefficients: Coefficients for Bell state where position at index [a,b,x,y] corresponds to coefficient of p(ab|xy).
 
     Return:
         The maximum possible violation achievable and the matrix of bell expression.

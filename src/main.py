@@ -15,21 +15,21 @@ def alice_eve_entrophy_maximalization(
     difference: float = 10e-3,
     max_iters: int = 100,
 ) -> Tuple[float, npt.NDArray[np.float64], npt.NDArray[np.complex128]]:
-    """Use npa hierarchy and basinhopping for finding the maximal value of H(A|x=x*,E) with values at which it occurred.
+    """Use npa hierarchy and basinhopping to finding the maximal value of H(A|x=x*,E) with values at which it occurred.
 
     Args:
         visibility: Visibility of quantum state.
         density_matrix: Initial density matrix of a state.
-        angles: Initla set of angles used to generate the measurements.
+        angles: Initial set of angles used to generate the measurements.
         x_star: Input at which the key is generated.
         level: Level of npa hierarchy for guessing probability.
-        difference: The difference between the entropy, above which the optimization still runs.
+        difference: The difference between the entropy, above which the optimization continues running.
         max_iters: How many should the problem be optimized, ignoring the difference.
 
     Returns:
         Value of entropy, set of angles and reduced density matrix for which the value was found.
     """
-    assert utilities.density_matix_check(density_matrix)
+    assert utilities.density_matrix_check(density_matrix)
     assert angles.ndim == 1 and angles.size % 2 == 0
     old_value = np.inf
     new_value = 100.0
@@ -38,10 +38,10 @@ def alice_eve_entrophy_maximalization(
         [2 * np.pi * i / utilities.STATES for i in range(utilities.STATES)], 2 * 2
     )
     i = 0
-    # Minimalization loop
+    # Minimazation loop
     while np.abs(old_value - new_value) > difference and max_iters > i:
         i += 1
-        low_visibiility_density_matrix = utilities.reduced_visibility_matrix(
+        low_visibility_density_matrix = utilities.reduced_visibility_matrix(
             density_matrix, visibility
         )
         alice_pvm_stacked, bob_pvm_stacked = (
@@ -53,7 +53,7 @@ def alice_eve_entrophy_maximalization(
             ),
         )
         probabilities = utilities.probability_array(
-            low_visibiility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
+            low_visibility_density_matrix, alice_pvm_stacked, bob_pvm_stacked
         )
         old_value = new_value
         guessing_probability, probabilities_coefficients = (
@@ -93,7 +93,7 @@ def alice_eve_entrophy_maximalization(
     )
 
 
-def alice_bob_entrophy_minimalization(
+def alice_bob_entropy_minimalization(
     density_matrix: npt.NDArray[np.complex128],
     alice_pvm_star_input: npt.NDArray[np.complex128],
 ) -> float:
@@ -158,13 +158,13 @@ def keyrate(
     entrophy_AE, angles, density = alice_eve_entrophy_maximalization(
         visibility, density, angles, x_star, guessing_level
     )
-    entrophy_AB = alice_bob_entrophy_minimalization(
+    entrophy_AB = alice_bob_entropy_minimalization(
         density, utilities.parametrized_projections(angles[x_star], angles[x_star + 1])
     )
-    keyrate_value = entrophy_AE - entrophy_AB
+    key_rate_value = entrophy_AE - entrophy_AB
     if verbose:
-        print(f"For V = {visibility}: r = {keyrate_value}")
-    return keyrate_value
+        print(f"For V = {visibility}: r = {key_rate_value}")
+    return key_rate_value
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# In this file are defined a constants, function that check if operations are proper quantum operations and calculate simple objects.
+# In this file are defined a constants and functions that check whether operations are valid quantum operations and compute basic objects.
 import numpy as np
 import numpy.typing as npt
 from itertools import product
@@ -59,7 +59,7 @@ def is_hermitian_psd(matrix: npt.NDArray[np.complex128]) -> bool:
     return float(eigenvalues.min()) >= -ATOL
 
 
-def density_matix_check(rho: npt.NDArray[np.complex128]) -> bool:
+def density_matrix_check(rho: npt.NDArray[np.complex128]) -> bool:
     """Check if passed quantum state is valid"""
     trace = np.abs(np.trace(rho))
     return (
@@ -70,8 +70,8 @@ def density_matix_check(rho: npt.NDArray[np.complex128]) -> bool:
     )
 
 
-def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.complex128]:
-    """Return state parametrized by theta"""
+def parametrized_state(theta: float, psi: float) -> npt.NDArray[np.complex128]:
+    """Return a state parametrized by θ and ψ."""
     zero_ket = np.array([1.0, 0.0], dtype=np.float64)
     one_ket = np.array([0.0, 1.0], dtype=np.float64)
     return np.astype(
@@ -81,8 +81,8 @@ def parametrixed_state(theta: float, psi: float) -> npt.NDArray[np.complex128]:
 
 
 def parametrized_projections(theta: float, psi: float) -> npt.NDArray[np.complex128]:
-    """Returns pair of pvm parametrized by theta"""
-    state = parametrixed_state(theta, psi)
+    """Return a pair of PVMs parametrized by θ and ψ."""
+    state = parametrized_state(theta, psi)
     pvm = np.astype(np.outer(state, state.conj()), np.complex128)
     return np.stack([pvm, np.eye(STATES) - pvm])
 
@@ -94,8 +94,8 @@ def pvm_from_angle_array(
 
     Args:
         angles: List where set of two indexes will be use to create a projection.
-        input: How many input should projection has.
-        output: How many output should projection has.
+        inputs: Number of input settings per party.
+        outputs: Number of possible outputs per measurement.
 
     Returns:
         Array where at the index [x,a] is matrix corresponding to pvm with input x and output a.
@@ -113,9 +113,9 @@ def pvm_from_angle_array(
 def reduced_visibility_matrix(
     rho: npt.NDArray[np.complex128], visibility: float
 ) -> npt.NDArray[np.complex128]:
-    """Set the visibility of a density matrix"""
+    """Apply reduced visibility to a density matrix."""
     assert visibility >= 0 and visibility <= 1
-    assert density_matix_check(rho)
+    assert density_matrix_check(rho)
     return np.astype(
         visibility * rho + (1 - visibility) / rho.shape[0] * np.eye(rho.shape[0]),
         np.complex128,
@@ -127,7 +127,7 @@ def bell_expression(
     alice_pvm_stack: npt.NDArray[np.complex128],
     bob_pvm_stack: npt.NDArray[np.complex128],
 ) -> npt.NDArray[np.float64]:
-    """Creates a matrix representing a bell expression.
+    """Create a matrix representing a Bell expression.
 
     Args:
         probabilities_coefficients: Coefficient at index [a,b,x,y] corresponds to the projection p(ab|xy) in bell expression.
@@ -162,16 +162,16 @@ def probability_array(
     """Create a probability vector of Alice and Bob measurements
 
     Args:
-        rho: Density matrix of a stat.
+        rho: Density matrix of a state.
         pvm_alice_set: Set of Alice pvm.
         pvm_bob_set: Set of Bob pvm.
 
     Returns:
-        Vector with probabilities of achieving the state where index a,b,x,y corresponds to p(ab|xy).
+        Array of joint probabilities where index [a,b,x,y] corresponds to p(ab|xy).
     """
     # Check validity of input
     assert pvm_check(pvm_alice_stacked) and pvm_check(pvm_bob_stacked)
-    assert density_matix_check(rho)
+    assert density_matrix_check(rho)
 
     probabilities = np.zeros(
         (
