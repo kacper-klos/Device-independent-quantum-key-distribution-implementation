@@ -22,6 +22,7 @@ repos:
         additional_dependencies:
           - numpy
           - pandas
+          - pytest
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1

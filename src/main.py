@@ -5,6 +5,8 @@ import optimizations
 import utilities
 from typing import Tuple
 
+import ipdb
+
 
 def alice_eve_entrophy_maximalization(
     visibility: float,
@@ -145,6 +147,8 @@ def keyrate(
     Return:
         Key rate.
     """
+    ipdb.set_trace()
+
     initial_state = np.ones(utilities.STATE_SHAPE[0]) / np.sqrt(
         utilities.STATE_SHAPE[0]
     )

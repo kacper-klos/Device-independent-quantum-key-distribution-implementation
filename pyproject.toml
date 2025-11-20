@@ -8,4 +8,11 @@ dependencies = [
     "mosek>=11.0.29",
     "ncpol2sdpa>=1.14.0",
     "numpy>=2.3.3",
+    "sympy>=1.14.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "pytest>=9.0.1",
 ]
