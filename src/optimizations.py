@@ -39,19 +39,11 @@ def GuessingProbability(
     E = [ncpol.generate_operators(f"E_({0})", a_size, hermitian=True)]
     # Create constraints satisfied by quantum systems
     quantum_equalities: List[sympy.core.expr.Expr] = []
-    quantum_inequalities: List[sympy.core.expr.Expr] = []
 
     def QuantumBehaviorBounds(
         operators: List[sympy.physics.quantum.operator.HermitianOperator],
     ) -> None:
         for input_operators_set in operators:
-            for i, operator in enumerate(input_operators_set):
-                quantum_inequalities.append(operator)
-                # Idempotent
-                quantum_equalities.append(operator * operator - operator)
-                for other_operator in input_operators_set[:i]:
-                    # Orthogonality
-                    quantum_equalities.append(operator * other_operator)
             # Summing to identity
             quantum_equalities.append(
                 sum(input_operators_set[i] for i in range(len(input_operators_set))) - 1
@@ -97,9 +89,8 @@ def GuessingProbability(
     sdp = ncpol.SdpRelaxation(verbose=1, variables=operators)
     sdp.get_relaxation(
         level=level,
-        objective=-sum(A[x_star][a] * E[0][a] for a in range(a_size)),
+        objective=sum(A[x_star][a] * E[0][a] for a in range(a_size)),
         equalities=quantum_equalities,
-        inequalities=quantum_inequalities,
         momentequalities=probabilities_equalities,
     )
     sdp.solve(solver="mosek")
