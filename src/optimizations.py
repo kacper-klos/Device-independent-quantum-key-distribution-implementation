@@ -27,9 +27,9 @@ def GuessingProbability(
     P = ncpol.Probability([2, 2], [2, 2])
     behaviour_constraints = [
         P([0], [0], "A") - np.sum(probabilities[0, :, 0, 0]),
-        P([0], [1], "A") - np.sum(probabilities[1, :, 0, 0]),
+        P([0], [1], "A") - np.sum(probabilities[0, :, 1, 0]),
         P([0], [0], "B") - np.sum(probabilities[:, 0, 0, 0]),
-        P([0], [1], "B") - np.sum(probabilities[:, 1, 0, 0]),
+        P([0], [1], "B") - np.sum(probabilities[:, 0, 0, 1]),
         P([0, 0], [0, 0]) - probabilities[0, 0, 0, 0],
         P([0, 0], [0, 1]) - probabilities[0, 0, 0, 1],
         P([0, 0], [1, 0]) - probabilities[0, 0, 1, 0],
