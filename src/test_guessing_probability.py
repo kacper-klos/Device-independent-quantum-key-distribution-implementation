@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 from optimizations import GuessingProbability
 
-level = 3
+level = 2
 
 
 def perfect_chsh() -> npt.NDArray[np.float64]:
@@ -53,7 +53,9 @@ def random_probability_test(p: float) -> None:
             probabilities[0, 0, x_i, y_i] = p
             probabilities[1, 1, x_i, y_i] = 1 - p
     print_guessing_result(
-        probabilities, GuessingProbability(probabilities, level=level)[0], 1.0
+        probabilities,
+        GuessingProbability(probabilities, level=level)[0],
+        np.max([p, 1 - p]),
     )
 
 
